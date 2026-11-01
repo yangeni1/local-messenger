@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1117">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Мессенджер</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="sideHead">
+      <div class="logo">💬 <b>Мессенджер</b></div>
+      <button id="closeSide" aria-label="Закрыть меню">✕</button>
+    </div>
+    <div class="me">
+      <div id="avatar" class="avatar">?</div>
+      <div class="meInfo">
+        <div id="meNick" class="nick">—</div>
+        <div id="conn" class="conn">подключение…</div>
+      </div>
+      <button id="rename" title="Сменить ник" aria-label="Сменить ник">✎</button>
+    </div>
+    <div class="section">ОНЛАЙН · <span id="onlineCount">0</span></div>
+    <ul id="online"></ul>
+    <button id="gameBtn" class="notif">🃏 Блэкджек</button>
+    <button id="gameBtn" class="notif">🃏 Блэкджек</button>
+    <button id="notifBtn" class="notif">🔔 Уведомления</button>
+    <div class="hint">Открой эту страницу во второй вкладке или браузере — и переписывайтесь.<br>Упомяни кого-то через <b>@ник</b> — придёт уведомление даже при открытом чате.</div>
+  </aside>
+  <div id="backdrop"></div>
+
+  <main id="chat">
+    <header id="chatHead">
+      <button id="menuBtn" aria-label="Меню" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="headTitle">
+        <b>#общий</b>
+        <span id="typing"></span>
+      </div>
+      <div class="headOnline" title="Онлайн">
+        <i class="dot"></i><span id="headCount">0</span>
+      </div>
+    </header>
+    <div id="log" role="log" aria-live="polite"></div>
+    <form id="form" autocomplete="off">
+      <textarea id="input" rows="1" placeholder="Сообщение…" maxlength="2000"></textarea>
+      <button type="submit" id="send" aria-label="Отправить">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 20.4l17.4-8.4c.8-.4.8-1.6 0-2L3.4 1.6c-.7-.3-1.4.3-1.2 1l2 7.1c.1.4.4.7.8.8l8.6 1.5-8.6 1.5c-.4.1-.7.4-.8.8l-2 7.1c-.2.7.5 1.3 1.2 1z"/></svg>
+      </button>
+    </form>
+  </main>
+</div>
+
+<div id="login" class="overlay" hidden>
+  <form id="loginForm" class="sheet" autocomplete="off">
+    <div class="lock">🔒</div>
+    <h2>Вход в чат</h2>
+    <p>Введите пароль, который дал владелец сервера.</p>
+    <input id="loginPass" type="password" placeholder="Пароль" autocomplete="current-password">
+    <button type="submit" class="primary">Войти</button>
+    <div id="loginErr" class="err"></div>
+  </form>
+</div>
+
+<div id="renameBox" class="overlay" hidden>
+  <form id="renameForm" class="sheet" autocomplete="off">
+    <div class="lock">🙂</div>
+    <h2>Твой ник</h2>
+    <p>Так тебя увидят остальные в чате.</p>
+    <input id="renameInput" maxlength="20" placeholder="Ник" autocomplete="nickname">
+    <div class="sheetRow">
+      <button type="button" id="renameCancel" class="ghost">Отмена</button>
+      <button type="submit" class="primary">Сохранить</button>
+    </div>
+  </form>
+</div>
+
+<script src="/app.js"></script>
+<div id="game" class="overlay" hidden>
+  <div id="table">
+    <header class="tableHead">
+      <b>🃏 Блэкджек</b>
+      <span id="bjBal" class="pill">1000 🪙</span>
+      <button id="bjClose" aria-label="Закрыть">✕</button>
+    </header>
+    <div class="felt">
+      <div class="handBlock dealer">
+        <div class="who">Дилер <span id="bjDTotal"></span></div>
+        <div class="hand" id="bjDealer"></div>
+      </div>
+      <div id="bjBanner" class="bjBanner"></div>
+      <div class="handBlock player">
+        <div class="hand" id="bjPlayer"></div>
+        <div class="who">Ты <span id="bjPTotal"></span></div>
+      </div>
+    </div>
+    <div class="bjHud">
+      <div class="chips">
+        <span class="pill">Ставка: <b id="bjBet">100</b></span>
+        <button class="chipbtn" data-chip="10">+10</button>
+        <button class="chipbtn" data-chip="50">+50</button>
+        <button class="chipbtn" data-chip="100">+100</button>
+        <button class="chipbtn" data-chip="500">+500</button>
+        <button class="ghost" id="bjBetClear">Сброс</button>
+        <button class="ghost" id="bjNewGame">Новая игра</button>
+      </div>
+      <div class="actions">
+        <button id="bjDeal" class="green">Раздать</button>
+        <button id="bjHit" class="ghost">Ещё</button>
+        <button id="bjStand" class="ghost">Хватит</button>
+        <button id="bjDouble" class="ghost">Удвоить</button>
+        <button id="bjShare" class="ghost" hidden>Похвастаться в чат</button>
+      </div>
+      <span id="bjMsg"></span>
+    </div>
+  </div>
+</div>
+<script src="/blackjack.js"></script>
+</body>
+</html>

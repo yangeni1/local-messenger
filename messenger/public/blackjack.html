@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1117">
+<title>🃏 Блэкджек</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  /* ---------------- блэкджек ---------------- */
+  body { margin: 0; height: 100%; font-family: system-ui, "Segoe UI", Roboto, sans-serif; color: #e6edf7; background: radial-gradient(circle at 50% 0%, #143d2a 0%, #071a11 55%, #030b07 100%); }
+  #table { position: relative; height: 100%; display: flex; flex-direction: column; }
+  .tableHead { display: flex; align-items: center; gap: 10px; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; border-bottom: 1px solid rgba(255,209,102,.14); }
+  .tableHead b { font-size: 16px; letter-spacing: .4px; }
+  .tableHead .pill { margin-left: auto; background: #1b212c; border: 1px solid #253041; border-radius: 999px; padding: 4px 10px; font-size: 13px; }
+  #bjClose { margin-left: auto; background: transparent; border: 1px solid #253041; color: #7f8ea3; border-radius: 8px; width: 30px; height: 30px; cursor: pointer; }
+  #bjClose:hover { color: #e6edf7; border-color: #5b8cff; }
+  .felt { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
+  .felt::before { content: ""; position: absolute; inset: 0 12% 0; border-radius: 0 0 50% 50% / 0 0 55% 55%; background: linear-gradient(180deg, #0f5132 0%, #0a3a24 85%, #07291a 100%); border: 2px solid rgba(255,209,102,.12); pointer-events: none; }
+  .handBlock { position: relative; z-index: 1; }
+  .handBlock.dealer { padding-top: 14px; }
+  .handBlock.player { padding-bottom: 14px; align-self: end; }
+  .who { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #9ad9b8; display: flex; align-items: center; gap: 10px; justify-content: center; }
+  .who span { color: #e6edf7; }
+  .who.bust span { color: #f87171; }
+  .hand { display: flex; gap: 0; min-height: 118px; align-items: center; justify-content: center; }
+  .card { width: 84px; height: 118px; border-radius: 10px; background: #fff; color: #111; display: flex; flex-direction: column; justify-content: space-between; padding: 7px 9px; font-weight: 800; font-size: 18px; box-shadow: 0 8px 20px rgba(0,0,0,.45); margin-left: -26px; transition: transform .25s, opacity .25s; }
+  .card:first-child { margin-left: 0; }
+  .card.red { color: #e63946; }
+  .card .top, .card .bot { display: flex; align-items: center; gap: 2px; }
+  .card .mid { align-self: center; font-size: 34px; }
+  .card .bot { align-self: flex-end; transform: rotate(180deg); }
+  .card.back { background: repeating-linear-gradient(45deg,#7f1d1d,#7f1d1d 8px,#450a0a 8px,#450a0a 16px); border: 3px solid #fff; color: transparent; }
+  .card.back .mid, .card.back .top, .card.back .bot { color: transparent; }
+  .card.deal { animation: deal .28s ease-out; }
+  @keyframes deal { from { transform: translate(0,-160px) rotate(-18deg); opacity: 0; } }
+  #bjBanner { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 2; }
+  .bjBanner { font-size: 40px; font-weight: 900; letter-spacing: 2px; color: #ffd166; text-shadow: 0 0 24px rgba(255,209,102,.5); opacity: 0; transform: scale(.85); transition: opacity .25s, transform .25s; text-align: center; }
+  .bjBanner.show { opacity: 1; transform: scale(1); }
+  .bjBanner b { display: block; }
+  .bjBanner span { display: block; font-size: 15px; letter-spacing: 1px; color: #f1f5f9; margin-top: 8px; font-weight: 500; }
+  .bjHud { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: rgba(3,11,7,.92); border-top: 1px solid rgba(255,209,102,.15); padding: 10px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .pill { background: #1b212c; border: 1px solid #253041; border-radius: 999px; padding: 4px 10px; font-size: 13px; }
+  .pill b { color: #ffd166; }
+  .chipbtn { background: #3f2a0a; color: #ffd166; border: 1px solid #6b4b14; padding: 8px 12px; border-radius: 10px; font: inherit; cursor: pointer; }
+  .chipbtn:hover { filter: brightness(1.2); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  button { font: inherit; font-weight: 700; letter-spacing: .5px; border-radius: 12px; border: none; padding: 10px 18px; cursor: pointer; transition: transform .08s, filter .15s; }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .35; cursor: default; }
+  .green { background: linear-gradient(135deg,#22c55e,#15803d); color: #fff; }
+  .ghost { background: #1f2f28; color: #e2e8f0; border: 1px solid #3b5446; }
+  #bjMsg { font-size: 14px; color: #a7c3b4; min-height: 20px; text-align: center; }
+  #girls { position: absolute; right: 16px; bottom: 70px; width: 230px; z-index: 2; }
+  .girl { display: flex; gap: 10px; align-items: center; background: rgba(10,30,20,.85); border: 1px solid rgba(255,209,102,.2); border-radius: 12px; padding: 8px 10px; margin-top: 8px; font-size: 12px; }
+  .girl .face { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 18px; background: linear-gradient(135deg,#ff7eb3,#ff758c); }
+  .girl .txt b { display: block; color: #fff; font-size: 13px; }
+  .girl .txt span { color: #9fb8ab; }
+  .girl.tip { animation: tip .6s; }
+  @keyframes tip { 40% { background: rgba(255,209,102,.25); transform: translateX(-6px); } }
+  @media (max-width: 900px) { #girls { display: none; } .bjBanner { font-size: 28px; } }
+  @media (max-height: 820px) { .card { width: 64px; height: 92px; font-size: 14px; margin-left: -20px; } .card .mid { font-size: 24px; } .hand { min-height: 92px; } }
+</style>
+</head>
+<body>
+<div id="table">
+  <header class="tableHead">
+    <b>🃏 Блэкджек</b>
+    <span id="bjBal" class="pill">1000 🪙</span>
+    <button id="bjClose" aria-label="Закрыть">✕</button>
+  </header>
+  <div class="felt">
+    <div class="handBlock dealer">
+      <div class="who">Дилер <span id="bjDTotal"></span></div>
+      <div class="hand" id="bjDealer"></div>
+    </div>
+    <div id="bjBanner" class="bjBanner"></div>
+    <div class="handBlock player">
+      <div class="hand" id="bjPlayer"></div>
+      <div class="who">Ты <span id="bjPTotal"></span></div>
+    </div>
+    <div id="girls"></div>
+  </div>
+  <div class="bjHud">
+    <div class="chips">
+      <span class="pill">Ставка: <b id="bjBet">100</b></span>
+      <button class="chipbtn" data-chip="10">+10</button>
+      <button class="chipbtn" data-chip="50">+50</button>
+      <button class="chipbtn" data-chip="100">+100</button>
+      <button class="chipbtn" data-chip="500">+500</button>
+      <button class="ghost" id="bjBetClear">Сброс</button>
+      <button class="ghost" id="bjNewGame">Новая игра</button>
+    </div>
+    <div class="actions">
+      <button id="bjDeal" class="green">Раздать</button>
+      <button id="bjHit" class="ghost">Ещё</button>
+      <button id="bjStand" class="ghost">Хватит</button>
+      <button id="bjDouble" class="ghost">Удвоить</button>
+      <button id="bjShare" class="ghost" hidden>Похвастаться в чат</button>
+    </div>
+    <span id="bjMsg"></span>
+  </div>
+</div>
+<script src="/blackjack.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "local-messenger",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Мини-мессенджер на чистом Node: HTTP + WebSocket без зависимостей",
+  "main": "server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js"
+  }
+}

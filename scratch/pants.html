@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ТРУСЫ РВУЩЕЕ 💥</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    font: 700 15px/1.4 ui-monospace, Consolas, monospace; letter-spacing: 2px;
+    color: #ff2b6d; text-shadow: 0 0 12px #ff2b6d; user-select: none; pointer-events: none;
+    animation: blink 1.2s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: .45 } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">КЛИК — И ЕЩЁ РАЗ · R — ПЕРЕЗАПУСК · 4 ПОДРЯД = ЯДЕРНЫЙ</div>
+<script>
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const rnd = (a, b) => a + Math.random() * (b - a);
+const TAU = Math.PI * 2;
+let W, H, t = 0;
+const resize = () => { W = cv.width = innerWidth; H = cv.height = innerHeight; };
+addEventListener('resize', resize); resize();
+
+let shock = [], sparks = [], comets = [], flashes = [], rings = [], shake = 0, queue = [], combo = 0, lastClick = 0;
+
+const PALETTE = ['#ff2b6d', '#ff7a00', '#ffe600', '#00ffd5', '#4d6bff', '#c13cff', '#ffffff'];
+
+function fire(x, y, power = 1) {
+  flashes.push({ x, y, r: 220 * power, life: 1 });
+  shake = Math.max(shake, 14 * power);
+  for (let i = 0; i < 90 * power; i++) {
+    const a = Math.random() * TAU, s = rnd(3, 34) * power;
+    sparks.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: rnd(0.006, 0.028), len: rnd(8, 34), w: rnd(0.6, 3), col: PALETTE[(Math.random() * PALETTE.length) | 0] });
+  }
+  shock.push({ x, y, r: 0, speed: rnd(10, 22) * power, life: 1, w: rnd(1, 5), col: '#fff' });
+  rings.push({ x, y, r: 0, speed: rnd(6, 12) * power, life: 1, col: PALETTE[(Math.random() * PALETTE.length) | 0] });
+  // трещины
+  for (let i = 0; i < 10 * power; i++) {
+    const a = rnd(0, TAU);
+    const pts = [{ x, y }];
+    let px = x, py = y, ang = a;
+    for (let k = 0; k < 7; k++) {
+      ang += rnd(-0.45, 0.45);
+      const d = rnd(20, 60);
+      px += Math.cos(ang) * d; py += Math.sin(ang) * d;
+      pts.push({ x: px, y: py });
+    }
+    shock.push({ crack: pts, life: 1, col: '#fff' });
+  }
+  for (let i = 0; i < 7 * power; i++) {
+    comets.push({ x, y, a: rnd(0, TAU), s: rnd(12, 30), life: 1, decay: rnd(0.01, 0.02), col: PALETTE[(Math.random() * PALETTE.length) | 0], w: rnd(1.5, 4) });
+  }
+}
+
+addEventListener('pointerdown', e => {
+  const now = performance.now();
+  combo = now - lastClick < 900 ? combo + 1 : 1;
+  lastClick = now;
+  const power = combo >= 4 ? 3.2 : 1 + combo * 0.25;
+  if (combo === 4) { queue.push({ x: W / 2, y: H / 2, power: 6, t0: now }); }
+  fire(e.clientX, e.clientY, power);
+});
+addEventListener('keydown', e => {
+  if (/^[rRкК]$/.test(e.key)) { sparks = []; shock = []; comets = []; flashes = []; rings = []; queue = []; combo = 0; }
+});
+
+function stroke(p, col, a) {
+  ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = p.w || 2;
+  ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  ctx.lineTo(p.x - p.vx * 0.35, p.y - p.vy * 0.35);
+  ctx.stroke();
+}
+
+function frame() {
+  t++;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(0,0,0,0.24)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  if (shake > 0.3) { ctx.translate(rnd(-shake, shake), rnd(-shake, shake)); shake *= 0.88; }
+  ctx.globalCompositeOperation = 'lighter';
+
+  // отложенные мега-взрывы
+  for (let i = queue.length - 1; i >= 0; i--) {
+    if (performance.now() - queue[i].t0 > 180) { const q = queue.splice(i, 1)[0]; fire(q.x, q.y, q.power); shake = 40; }
+  }
+
+  // вспышки
+  for (let i = flashes.length - 1; i >= 0; i--) {
+    const f = flashes[i]; f.life -= 0.05;
+    if (f.life <= 0) { flashes.splice(i, 1); continue; }
+    const r = f.r * (1.6 - f.life);
+    const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+    g.addColorStop(0, `rgba(255,255,255,${f.life * 0.95})`);
+    g.addColorStop(0.25, `rgba(255,60,120,${f.life * 0.7})`);
+    g.addColorStop(1, 'rgba(80,0,255,0)');
+    ctx.fillStyle = g; ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, TAU); ctx.fill();
+  }
+
+  // кольца
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const r = rings[i]; r.r += r.speed; r.life -= 0.018;
+    if (r.life <= 0) { rings.splice(i, 1); continue; }
+    ctx.globalAlpha = r.life; ctx.strokeStyle = r.col; ctx.lineWidth = 2 + r.life * 4;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke();
+  }
+
+  // ударные волны + молнии-трещины
+  for (let i = shock.length - 1; i >= 0; i--) {
+    const s = shock[i]; s.life -= s.crack ? 0.03 : 0.022;
+    if (s.life <= 0) { shock.splice(i, 1); continue; }
+    ctx.globalAlpha = s.life;
+    ctx.strokeStyle = s.col; ctx.lineWidth = s.w || 3;
+    ctx.shadowBlur = 18; ctx.shadowColor = '#ff2b6d';
+    ctx.beginPath();
+    if (s.crack) { s.crack.forEach((p, k) => k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); }
+    else { s.r += s.speed; s.speed *= 0.96; ctx.arc(s.x, s.y, s.r, 0, TAU); }
+    ctx.stroke(); ctx.shadowBlur = 0;
+  }
+
+  // кометы
+  for (let i = comets.length - 1; i >= 0; i--) {
+    const c = comets[i]; c.a += 0.03; c.x += Math.cos(c.a) * c.s * c.life; c.y += Math.sin(c.a) * c.s * c.life; c.life -= c.decay;
+    if (c.life <= 0) { comets.splice(i, 1); continue; }
+    ctx.globalAlpha = c.life; ctx.strokeStyle = c.col; ctx.lineWidth = c.w;
+    ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x - Math.cos(c.a) * 40 * c.life, c.y - Math.sin(c.a) * 40 * c.life); ctx.stroke();
+  }
+
+  // искры
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const p = sparks[i];
+    p.vx *= 0.975; p.vy = p.vy * 0.975 + 0.14;
+    p.x += p.vx; p.y += p.vy; p.life -= p.decay;
+    if (p.life <= 0 || p.y > H + 60) { sparks.splice(i, 1); continue; }
+    ctx.shadowBlur = 12; ctx.shadowColor = p.col;
+    stroke(p, p.col, p.life);
+  }
+  ctx.shadowBlur = 0;
+
+  // эпицентр щелчком пульсирует — чтобы было «рвущее»
+  ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 0.15);
+  ctx.fillStyle = 'rgba(255,43,109,0.9)';
+  ctx.beginPath(); ctx.arc(W / 2, H / 2, 2, 0, TAU); ctx.fill();
+
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  if (sparks.length > 3500) sparks.splice(0, sparks.length - 3500);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// автозажигание, чтобы сразу было видно
+let warmup = 0;
+const warmSpots = [[0.5, 0.5, 3], [0.3, 0.4, 2], [0.7, 0.6, 2], [0.5, 0.5, 4]];
+function tick() {
+  if (warmup < warmSpots.length && t > 15 + warmup * 18) {
+    const [x, y, p] = warmSpots[warmup++];
+    fire(W * x, H * y, p);
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

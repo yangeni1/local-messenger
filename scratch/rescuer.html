@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ТРУСЫ-СПАСАТЕЛЬ 🦸</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07111f; }
+  canvas { display: block; cursor: pointer; background: #07111f; position: fixed; inset: 0; }
+  #hud {
+    position: fixed; left: 50%; top: 16px; transform: translateX(-50%);
+    font: 700 14px/1.5 ui-monospace, Consolas, monospace; letter-spacing: 1px;
+    color: #7fe7ff; text-shadow: 0 0 10px #2ea8ff; user-select: none; pointer-events: none;
+    text-align: center;
+  }
+  #hud b { color: #fff; }
+  #shop {
+    position: fixed; right: 16px; top: 70px; width: 300px;
+    padding: 12px; border-radius: 14px;
+    background: rgba(8,20,38,.88); border: 1px solid rgba(127,231,255,.35);
+    box-shadow: 0 0 30px rgba(46,168,255,.25);
+    font: 13px/1.35 ui-monospace, Consolas, monospace; color: #cfeaff;
+    transform: translateX(120%); transition: transform .18s ease;
+    pointer-events: none;
+  }
+  #shop.open { transform: translateX(0); pointer-events: auto; }
+  #shopHead { font-weight: 700; letter-spacing: 1px; color: #fff; margin-bottom: 8px; }
+  #shopHead span { color: #ffe066; }
+  .item {
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px; margin-bottom: 6px;
+    border-radius: 9px; background: rgba(127,231,255,.08); cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .item:hover { border-color: rgba(127,231,255,.6); background: rgba(127,231,255,.16); }
+  .item.poor { opacity: .45; cursor: not-allowed; }
+  .item.max { opacity: .6; cursor: default; }
+  .item .k { color: #7fe7ff; font-weight: 700; width: 12px; }
+  .item .ic { font-size: 18px; width: 22px; text-align: center; }
+  .item .txt { flex: 1; display: flex; flex-direction: column; }
+  .item .txt b { color: #fff; font-size: 12px; letter-spacing: .5px; }
+  .item .lvl { color: #ffe066; font-size: 11px; }
+  .item .txt small { color: #8fb3cc; font-size: 11px; }
+  .item .price { color: #ffe066; font-weight: 700; white-space: nowrap; }
+  #shopFoot { color: #6d8aa3; font-size: 11px; margin-top: 4px; }
+  #shopFoot b { color: #7fe7ff; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">ВЕДИ МЫШКОЙ — ТРУСЫ ЛЕТЯТ СПАСАТЬ · <b>КЛИК</b> — ПРУЖИНА · <b>TAB</b> — ПРОКАЧКА · <b>R</b> — СБРОС<br><b>ОЧКИ: <span id="score">0</span> · СПАСЕНО: <span id="saved">0</span> · FPS: <span id="fps">—</span></b></div>
+<script>
+const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha: false });
+const rnd = (a, b) => a + Math.random() * (b - a);
+const TAU = Math.PI * 2;
+
+const scoreEl = document.getElementById('score'), savedEl = document.getElementById('saved'), fpsEl = document.getElementById('fps');
+let score = 0, saved = 0, W = 0, H = 0, DPR = 1;
+
+const pants = { x: 0, y: 0, vx: 0, vy: 0, ang: 0, squash: 0 };
+let mx = 0, my = 0;
+const DOTS = [], SPARKLES = [];
+let sparkBudget = 0;
+
+const PAL = ['#ff6bb5', '#7fe7ff', '#ffe066', '#a6ff7f', '#c68bff'];
+
+/* ---------- предрендер: спрайты вместо сотен путей на кадр ---------- */
+
+function offscreen(w, h, draw) {
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(w); c.height = Math.ceil(h);
+  const g = c.getContext('2d');
+  draw(g);
+  return c;
+}
+
+// писька: единичный масштаб ~14x14, затем рисуем картинкой
+function makeWillySprite(col) {
+  const S = 32, c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const g = c.getContext('2d');
+  g.translate(S / 2, S / 2);
+  g.scale(2.0 * 0.6, 2.0 * 0.6);
+  g.translate(0, 0.6);
+  g.lineCap = 'round';
+  g.fillStyle = col; g.strokeStyle = col;
+  g.beginPath(); g.moveTo(0, -3.5); g.lineTo(0, 3); g.lineWidth = 3.2; g.stroke();
+  g.beginPath(); g.arc(0, -4.2, 2.5, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(-2, 5.2, 2.1, 2.7, 0.25, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(2, 5.2, 2.1, 2.7, -0.25, 0, TAU); g.fill();
+  return c;
+}
+// мягкое свечение — радиальный градиент, тоже один раз
+function makeGlow(col, size = 48) {
+  return offscreen(size, size, g => {
+    const r = size / 2;
+    const grd = g.createRadialGradient(r, r, 0, r, r, r);
+    grd.addColorStop(0, col);
+    grd.addColorStop(0.35, col + '99');
+    grd.addColorStop(1, col + '00');
+    g.fillStyle = grd; g.fillRect(0, 0, size, size);
+  });
+}
+
+const WILLY = {}, GLOW = {}, DOTC = {};
+for (const c of PAL) { WILLY[c] = makeWillySprite(c); GLOW[c] = makeGlow(c, 48); DOTC[c] = makeGlow(c, 24); }
+
+function makePantsSprite() {
+  return offscreen(280, 220, g => {
+    g.translate(140, 110);
+    g.scale(5, 5);
+    const body = '#ff6bb5', trim = '#ffd1e8';
+    g.fillStyle = body;
+    g.beginPath();
+    g.moveTo(-20, -8); g.lineTo(20, -8);
+    g.quadraticCurveTo(22, 2, 12, 6);
+    g.quadraticCurveTo(4, 10, 0, 12);
+    g.quadraticCurveTo(-4, 10, -12, 6);
+    g.quadraticCurveTo(-22, 2, -20, -8);
+    g.closePath(); g.fill();
+    g.strokeStyle = trim; g.lineWidth = 2.2;
+    g.beginPath(); g.moveTo(-20, -7.5); g.lineTo(20, -7.5); g.stroke();
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(-9, 10.5); g.quadraticCurveTo(-8, 14, -13, 15); g.stroke();
+    g.beginPath(); g.moveTo(9, 10.5); g.quadraticCurveTo(8, 14, 13, 15); g.stroke();
+    g.fillStyle = '#ffe066';
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 2 : 5;
+      g.lineTo(Math.cos(a) * r, Math.sin(a) * r + 0.5);
+    }
+    g.closePath(); g.fill();
+  });
+}
+const PANTS = makePantsSprite();
+const PANTS_GLOW = makeGlow('#ff6bb5', 320);
+
+let bgc;
+function paintBg() {
+  bgc = offscreen(W, H, b => {
+    const g = b.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#07111f'); g.addColorStop(0.6, '#0b1c33'); g.addColorStop(1, '#120c2a');
+    b.fillStyle = g; b.fillRect(0, 0, W, H);
+    for (let i = 0; i < 5; i++) {
+      const cx = rnd(0, W), cy = rnd(40, H - 120), s = rnd(0.5, 1.1);
+      b.globalAlpha = 0.07; b.fillStyle = '#bdefff';
+      b.beginPath();
+      b.arc(cx, cy, 40 * s, 0, TAU);
+      b.arc(cx + 34 * s, cy + 8 * s, 32 * s, 0, TAU);
+      b.arc(cx - 34 * s, cy + 10 * s, 28 * s, 0, TAU);
+      b.arc(cx, cy + 16 * s, 34 * s, 0, TAU);
+      b.fill();
+    }
+    b.globalAlpha = 1;
+    for (let i = 0; i < 160; i++) {
+      b.fillStyle = `rgba(200,235,255,${rnd(0.1, 0.5)})`;
+      b.beginPath(); b.arc(rnd(0, W), rnd(0, H), rnd(0.4, 1.4), 0, TAU); b.fill();
+    }
+  });
+}
+
+function resize() {
+  // DPR ограничен: на 4K с dpr=2 это в 4 раза меньше пикселей
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = cv.width = Math.floor(innerWidth * DPR);
+  H = cv.height = Math.floor(innerHeight * DPR);
+  cv.style.width = '100%'; cv.style.height = '100%';
+  mx = Math.min(mx || W / 2, W); my = Math.min(my || H / 2, H);
+  paintBg();
+}
+addEventListener('resize', resize);
+resize();
+ctx.imageSmoothingQuality = 'low';
+
+/* ---------- игра ---------- */
+
+class Dot {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    const a = rnd(0, TAU), s = rnd(2, 6) * DPR;
+    this.vx = Math.cos(a) * s; this.vy = Math.sin(a) * s;
+    this.r = rnd(3, 7) * DPR;
+    this.phase = rnd(0, TAU);
+    this.state = 'try';
+    this.life = 1;
+    this.kind = Math.random() < 0.3 ? 'willy' : 'dot';
+    this.col = PAL[(Math.random() * PAL.length) | 0];
+  }
+}
+
+function spawnCluster() {
+  const cx = rnd(80, W - 80), cy = rnd(80, H - 80);
+  for (let i = 0; i < 6; i++) DOTS.push(new Dot(cx + rnd(-40, 40) * DPR, cy + rnd(-40, 40) * DPR));
+}
+
+// спавн «войны»: влетают с краёв экрана, что заодно даёт плавную непрерывную волну
+function spawnClusterEm() {
+  for (let i = 0; i < 4; i++) {
+    const d = new Dot(0, 0);
+    const edge = (Math.random() * 4) | 0;
+    if (edge === 0) { d.x = rnd(0, W); d.y = -30; d.vy = rnd(2, 5) * DPR; }
+    else if (edge === 1) { d.x = rnd(0, W); d.y = H + 30; d.vy = -rnd(2, 5) * DPR; }
+    else if (edge === 2) { d.x = -30; d.y = rnd(0, H); d.vx = rnd(2, 5) * DPR; }
+    else { d.x = W + 30; d.y = rnd(0, H); d.vx = -rnd(2, 5) * DPR; }
+    DOTS.push(d);
+  }
+}
+function spawnWave() { for (let i = 0; i < 6; i++) spawnClusterEm(); }
+
+/* ---------- прокачка и баланс ---------- */
+const UP = [
+  { id: 'magnet', name: 'МАГНИТ', desc: 'радиус притяжения +45', base: 10, max: 8, icon: '🧲' },
+  { id: 'grab', name: 'ЛОВКОСТЬ', desc: 'радиус захвата +8', base: 14, max: 8, icon: '✋' },
+  { id: 'speed', name: 'ТУРБО', desc: 'скорость трусов +12%', base: 12, max: 6, icon: '⚡' },
+  { id: 'mult', name: 'ЗВЕЗДА ГОРОДА', desc: 'очки за спасение +25%', base: 20, max: 6, icon: '⭐' },
+  { id: 'spawn', name: 'НАПЛЫВ', desc: 'письки появляются чаще, +15% очков', base: 18, max: 6, icon: '🌊' },
+];
+const lv = { magnet: 0, grab: 0, speed: 0, mult: 0, spawn: 0 };
+
+function cost(u) { return Math.round(u.base * Math.pow(1.55, lv[u.id])); }
+function canBuy(u) { return lv[u.id] < u.max && score >= cost(u); }
+function buy(u) {
+  if (!shopOpen()) { toggleShop(true); return false; }
+  if (!canBuy(u)) return false;
+  score -= cost(u); lv[u.id]++;
+  updateHud(); renderShop();
+  return true;
+}
+
+const ui = document.createElement('div');
+ui.id = 'shop';
+ui.innerHTML = `
+  <div id="shopHead">🛒 ПРОКАЧКА · <span id="shopBal">0</span> ⭐</div>
+  <div id="shopBody"></div>
+  <div id="shopFoot">1-5 / клик — купить · <b>TAB</b> — открыть</div>`;
+document.body.appendChild(ui);
+
+const shopOpen = () => ui.classList.contains('open');
+function toggleShop(force) {
+  const open = force === undefined ? !shopOpen() : force;
+  ui.classList.toggle('open', open);
+  if (open) renderShop();
+}
+
+function renderShop() {
+  document.getElementById('shopBal').textContent = score;
+  const body = document.getElementById('shopBody');
+  body.innerHTML = '';
+  UP.forEach((u, i) => {
+    const bought = lv[u.id] >= u.max;
+    const price = cost(u);
+    const el = document.createElement('div');
+    el.className = 'item' + (bought ? ' max' : canBuy(u) ? '' : ' poor');
+    el.innerHTML = `<span class="k">${i + 1}</span><span class="ic">${u.icon}</span>
+      <span class="txt"><b>${u.name}</b> <span class="lvl">${lv[u.id]}/${u.max}</span><small>${u.desc}</small></span>
+      <span class="price">${bought ? 'MAX' : price + ' ⭐'}</span>`;
+    el.addEventListener('click', () => buy(u));
+    body.appendChild(el);
+  });
+}
+
+function updateHud() {
+  scoreEl.textContent = score; savedEl.textContent = saved;
+  const bal = document.getElementById('shopBal'); if (bal) bal.textContent = score;
+}
+
+function reset() {
+  DOTS.length = 0; SPARKLES.length = 0;
+  score = 0; saved = 0;
+  pants.x = W / 2; pants.y = H / 2; pants.vx = pants.vy = 0;
+  mx = W / 2; my = H / 2;
+  updateHud(); renderShop(); spawnCluster(); spawnCluster();
+}
+function saveBest() {
+  try {
+    if (score > +(localStorage.getItem('rescuer.best') || 0)) localStorage.setItem('rescuer.best', score);
+  } catch (e) {}
+}
+
+function burst(x, y, col) {  // бюджет искр: не больше ~40 новых за кадр и ~200 всего
+  const n = Math.min(10, 40 - sparkBudget);
+  if (n <= 0) return;
+  sparkBudget += n;
+  for (let i = 0; i < n; i++) {
+    const a = rnd(0, TAU), s = rnd(1, 5) * DPR;
+    SPARKLES.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: rnd(0.03, 0.06), r: rnd(1.5, 4) * DPR, col: col });
+  }
+}
+
+addEventListener('pointermove', e => { mx = e.clientX * DPR; my = e.clientY * DPR; });
+addEventListener('pointerdown', e => { mx = e.clientX * DPR; my = e.clientY * DPR; pants.squash = 1; burst(pants.x, pants.y, '#7fe7ff'); });
+addEventListener('keydown', e => {
+  if (/^[rRкК]$/.test(e.key)) { saveBest(); reset(); }
+  if (e.code === 'Tab') { e.preventDefault(); toggleShop(); }
+  if (e.key === 'Escape') toggleShop(false);
+  if (/^[1-5]$/.test(e.key)) buy(UP[+e.key - 1]);
+});
+
+let t = 0, last = 0, fpsAcc = 0, fpsN = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(40, now - last) / 16.67; // нормализация к 60 fps
+  last = now;
+  t += dt;
+
+  // счётчик fps
+  fpsAcc += dt; fpsN++;
+  if (fpsAcc > 30) { fpsEl.textContent = Math.round(fpsN * 16.67 / fpsAcc); fpsAcc = 0; fpsN = 0; }
+
+  sparkBudget = Math.max(0, sparkBudget - 8);
+
+  if (!document.hidden) {
+    ctx.globalAlpha = 1;
+    ctx.drawImage(bgc, 0, 0);
+
+    // пружина
+    const k = 0.045 * (1 + lv.speed * 0.12), damp = 0.84;
+    pants.vx = (pants.vx + (mx - pants.x) * k) * Math.pow(damp, dt);
+    pants.vy = (pants.vy + (my - pants.y) * k) * Math.pow(damp, dt);
+    pants.x += pants.vx * dt; pants.y += pants.vy * dt;
+    pants.ang = Math.max(-0.5, Math.min(0.5, pants.vx * 0.03));
+    pants.squash *= Math.pow(0.9, dt);
+    const speed = Math.hypot(pants.vx, pants.vy) / DPR;
+
+    // лучи
+    ctx.globalAlpha = 0.08 + Math.min(1, speed / 18) * 0.08;
+    const aura = (130 + 30 * Math.sin(t * 0.05)) * DPR;
+    ctx.drawImage(GLOW['#7fe7ff'], pants.x - aura, pants.y - aura, aura * 2, aura * 2);
+
+    // спавн
+    if (Math.random() < (0.55 + lv.spawn * 0.12) * dt) for (let i = 0; i < 2; i++) DOTS.push(new Dot(rnd(0, W), rnd(0, H)));
+    if (DOTS.length < 6) spawnWave();
+
+    // физика
+    const MAG = (150 + lv.magnet * 45) * DPR;
+    const GRAB = (46 + lv.grab * 8) * DPR;
+    for (let i = DOTS.length - 1; i >= 0; i--) {
+      const d = DOTS[i];
+      if (d.state === 'try') {
+        d.x += d.vx * dt; d.y += d.vy * dt;
+        const f = Math.pow(0.985, dt);
+        d.vx *= f; d.vy *= f;
+        if (d.x < 6) { d.x = 6; d.vx = Math.abs(d.vx); }
+        else if (d.x > W - 6) { d.x = W - 6; d.vx = -Math.abs(d.vx); }
+        if (d.y < 6) { d.y = 6; d.vy = Math.abs(d.vy); }
+        else if (d.y > H - 6) { d.y = H - 6; d.vy = -Math.abs(d.vy); }
+        const dx = pants.x - d.x, dy = pants.y - d.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const R = MAG;
+        if (dist < R) {
+          const ff = (1 - dist / R) * 1.6;
+          d.vx += (dx / dist) * ff; d.vy += (dy / dist) * ff;
+        }
+        if (dist < GRAB) {
+          DOTS.splice(i, 1);
+          saved++;
+          const gain = (d.kind === 'willy' ? 2 : 1) * (1 + lv.mult * 0.25) * (1 + lv.spawn * 0.15);
+          score = Math.round(score + gain);
+          updateHud(); burst(d.x, d.y, d.col);
+          pants.squash = Math.max(pants.squash, 0.35);
+          continue;
+        }
+      }
+    }
+
+    if (DOTS.length > 140) DOTS.splice(0, DOTS.length - 140);
+
+    // отрисовка точек спрайтами
+    for (const d of DOTS) {
+      const wob = Math.sin(t * 0.08 + d.phase) * 0.6 * DPR;
+      if (d.kind === 'willy') {
+        const sz = (d.r * 0.9 + 3) * 2.4 * DPR;
+        ctx.drawImage(WILLY[d.col], d.x - sz / 2, d.y - sz + wob * 2, sz, sz);
+      } else {
+        const sz = (d.r + wob) * 4;
+        ctx.drawImage(DOTC[d.col], d.x - sz / 2, d.y - sz / 2, sz, sz);
+      }
+    }
+
+    // искры
+    for (let i = SPARKLES.length - 1; i >= 0; i--) {
+      const p = SPARKLES[i];
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      const f = Math.pow(0.96, dt);
+      p.vx *= f; p.vy *= f; p.life -= p.decay * dt;
+      if (p.life <= 0) { SPARKLES.splice(i, 1); continue; }
+      ctx.globalAlpha = p.life;
+      const sz = p.r * 4 * (0.5 + p.life);
+      ctx.drawImage(DOTC[p.col], p.x - sz / 2, p.y - sz / 2, sz, sz);
+    }
+    ctx.globalAlpha = 1;
+
+    // трусы
+    const sc = (1 - pants.squash * 0.35) * DPR;
+    ctx.save();
+    ctx.translate(pants.x, pants.y);
+    ctx.rotate(pants.ang);
+    ctx.scale(sc, sc * (1 + pants.squash * 0.3));
+    const gs = 320;
+    ctx.globalAlpha = 0.35 + Math.min(1, speed / 18) * 0.3;
+    ctx.drawImage(PANTS_GLOW, -gs / 2, -gs / 2, gs, gs);
+    ctx.globalAlpha = 1;
+    ctx.drawImage(PANTS, -140, -110);
+    ctx.restore();
+
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#ffd1e8';
+    ctx.font = `${12 * DPR}px ui-monospace, Consolas, monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('СПАСАТЕЛЬ НА ПОСТУ', pants.x, pants.y + 46 * DPR);
+    ctx.textAlign = 'start';
+    ctx.globalAlpha = 1;
+
+    // подсказка если совсем пусто
+    if (saved === 0 && !shopOpen()) {
+      ctx.globalAlpha = 0.5 + 0.4 * Math.sin(t * 0.06);
+      ctx.fillStyle = '#7fe7ff';
+      ctx.font = `${16 * DPR}px ui-monospace, Consolas, monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('наведи на огоньки — трусы подлетят и спасут', W / 2, H - 40 * DPR);
+      ctx.textAlign = 'start';
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+reset();
+renderShop();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
